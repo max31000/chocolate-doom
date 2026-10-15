@@ -13,7 +13,17 @@
 // - Audio: resumes the SDL2 AudioContext on the first user gesture (autoplay policy).
 // - Hidden tab: the game is paused (bliss_pause) and resumed when visible again, unless
 //   `blissAutoPause: false` or the host paused it itself.
+// - Canvas blur releases held keys (bliss_release_keys).
+// - bliss_dispose() removes every listener added here (AbortController) and closes the
+//   AudioContext.
 (function () {
+  // Every listener added here uses this signal; bliss_dispose() aborts it.
+  var listeners = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var opts = function (extra) {
+    var o = extra || {};
+    if (listeners) o.signal = listeners.signal;
+    return o;
+  };
   var dataDir = Module['blissDataDir'] || '/data';
   Module['blissDataDir'] = dataDir;
 
@@ -38,6 +48,19 @@
   Module['preRun'] = preRun;
 
   // ---- events -----------------------------------------------------------------------------
+  // ---- dispose ----------------------------------------------------------------------------
+  // Called by bliss_dispose() after the main loop, audio and SDL were shut down.
+  Module['blissDisposeInternal'] = function () {
+    Module['blissStarted'] = false;
+    Module['blissDisposed'] = true;
+    if (listeners) listeners.abort();
+    var sdl2 = Module['SDL2'];
+    var ctx = sdl2 && sdl2.audioContext;
+    if (ctx && ctx.state !== 'closed') { try { ctx.close(); } catch (e) { /* closed */ } }
+    if (sdl2) sdl2.audioContext = undefined;
+    if (Module['canvas']) Module['canvas'].__blissModule = null;
+  };
+
   // Called by the game (I_Web_Emit) before the host's onBlissEvent.
   Module['blissOnEventInternal'] = function (type) {
     if (type === 'started') {
@@ -54,7 +77,7 @@
   // ---- auto pause in hidden tabs ----------------------------------------------------------
   var autoPaused = false;
   function autoPause(hidden) {
-    if (Module['blissAutoPause'] === false || !Module['blissStarted']) return;
+    if (Module['blissAutoPause'] === false || !Module['blissStarted'] || Module['blissDisposed']) return;
     if (hidden) {
       if (!Module['_bliss_is_paused']()) { Module['_bliss_pause'](); autoPaused = true; }
     } else if (autoPaused) {
@@ -63,16 +86,20 @@
     }
   }
   if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', function () { autoPause(document.hidden); });
+    document.addEventListener('visibilitychange', function () { autoPause(document.hidden); }, opts());
   }
 
   // ---- canvas / input ---------------------------------------------------------------------
   function setupCanvas() {
     var canvas = Module['canvas'];
-    if (!canvas || canvas.__blissSetup) return;
-    canvas.__blissSetup = true;
+    if (!canvas || canvas.__blissModule === Module) return;
+    canvas.__blissModule = Module;
     if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex', '0');
-    canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); }, opts());
+    // Key-ups after the canvas lost focus go elsewhere: release the held keys.
+    canvas.addEventListener('blur', function () {
+      if (Module['blissStarted'] && Module['_bliss_release_keys']) Module['_bliss_release_keys']();
+    }, opts());
     canvas.addEventListener('pointerdown', function () {
       canvas.focus({ preventScroll: true });
       if (Module['blissStarted'] && Module['_bliss_mouse_wanted'] && Module['_bliss_mouse_wanted']() &&
@@ -82,7 +109,7 @@
           if (p && p.catch) p.catch(function () { /* denied: keyboard play still works */ });
         } catch (e) { /* not supported */ }
       }
-    });
+    }, opts());
   }
   setupCanvas();
 
@@ -93,7 +120,7 @@
   }
   if (typeof window !== 'undefined') {
     ['keydown', 'pointerdown', 'touchstart'].forEach(function (type) {
-      window.addEventListener(type, resumeAudio, { capture: true, passive: true });
+      window.addEventListener(type, resumeAudio, opts({ capture: true, passive: true }));
     });
   }
 })();

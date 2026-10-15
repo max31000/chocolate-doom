@@ -411,13 +411,13 @@ void D_RunFrame()
     static int wipestart;
     static boolean wipe;
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     int oldgametic;
 #endif
 
     if (wipe)
     {
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
         // Browser main loop: no waiting, the next frame comes anyway.
         nowtime = I_GetTime ();
         tics = nowtime - wipestart;
@@ -446,13 +446,13 @@ void D_RunFrame()
     // frame syncronous IO operations
     I_StartFrame ();
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     oldgametic = gametic;
 #endif
 
     TryRunTics (); // will run at least one tic
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // Non-blocking TryRunTics: nothing new to show until the next tic
     // (35 Hz game, display refresh usually faster). The canvas keeps the
     // last frame.
@@ -506,7 +506,7 @@ void D_DoomLoop (void)
     I_InitGraphics();
     EnableLoadingDisk();
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     i_web_nonblocking_loop = true;
 #endif
 
@@ -522,7 +522,7 @@ void D_DoomLoop (void)
         wipegamestate = gamestate;
     }
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // Browser: one D_RunFrame() per display frame (requestAnimationFrame).
     D_Web_StartMainLoop(gamedescription);
 #else

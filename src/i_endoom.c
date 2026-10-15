@@ -37,7 +37,7 @@ void I_Endoom(byte *endoom_data)
     int y;
     int indent;
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // Web: no text mode window, and its key wait loop would block the
     // browser. The host page owns what is shown after quitting.
     return;

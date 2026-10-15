@@ -18,7 +18,7 @@
 #ifndef __D_WEB__
 #define __D_WEB__
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
 
 #include "doomtype.h"
 

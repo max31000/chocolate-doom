@@ -29,7 +29,7 @@
 
 static Uint32 basetime = 0;
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
 
 // Web: the host can pause the game (bliss_pause). The game clock stands
 // still while paused, so the game does not catch up on the paused time.

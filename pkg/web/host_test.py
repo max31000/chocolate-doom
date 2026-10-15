@@ -83,6 +83,32 @@ MAINLOOP_HOOK = """
 """
 
 
+COUNT_CALLS = """
+(() => {
+  const M = window.__doom;
+  window.__calls = {};
+  for (const k of ['_bliss_release_keys', '_bliss_mouse_wanted', '_bliss_pause', '_bliss_resume',
+                   '_bliss_is_paused', '_bliss_set_master_volume']) {
+    const f = M[k];
+    M[k] = (...a) => { window.__calls[k] = (window.__calls[k] || 0) + 1; return f(...a); };
+  }
+})();
+"""
+
+DISPATCH_EVENTS = """
+(() => {
+  const c = document.getElementById('game');
+  c.focus(); document.getElementById('vol').focus();
+  c.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+  document.dispatchEvent(new Event('visibilitychange'));
+  delete document.hidden;
+  document.dispatchEvent(new Event('visibilitychange'));
+})();
+"""
+
+
 def stats(values):
     if not values:
         return {}
@@ -234,6 +260,38 @@ def main():
                 page.wait_for_function("window.__events.some(e => e.type === 'quit')", timeout=10000)
                 result["quit_delay_s"] = round(time.time() - tq, 2)
                 result["events"] = sorted({e["type"] for e in page.evaluate("window.__events")})
+
+                # bliss_dispose: create again, check blur releases keys, dispose (twice), then no
+                # pre.js listener reaches the module and no AudioContext runs; create once more.
+                page.evaluate("window.__start()")
+                page.wait_for_function(
+                    "window.__events.filter(e => e.type === 'started').length >= 2", timeout=30000)
+                time.sleep(1.5)
+                page.evaluate(COUNT_CALLS)
+                page.evaluate("document.getElementById('game').focus(); document.getElementById('vol').focus()")
+                blur_calls = page.evaluate("window.__calls['_bliss_release_keys'] || 0")
+                page.evaluate("window.__doom._bliss_dispose(); window.__doom._bliss_dispose();")
+                time.sleep(0.5)
+                page.evaluate("for (const k in window.__calls) window.__calls[k] = 0")
+                page.evaluate(DISPATCH_EVENTS)
+                time.sleep(0.5)
+                calls_after = page.evaluate("Object.values(window.__calls).reduce((a, b) => a + b, 0)")
+                states_after = page.evaluate("window.__audioContexts.map(c => c.state)")
+                page.evaluate("window.__start()")
+                page.wait_for_function(
+                    "window.__events.filter(e => e.type === 'started').length >= 3", timeout=30000)
+                time.sleep(1.5)
+                states_third = page.evaluate("window.__audioContexts.map(c => c.state)")
+                shot(page, "07-recreated")
+                page.evaluate("window.__doom._bliss_dispose()")
+                time.sleep(0.3)
+                result["dispose"] = {
+                    "blur_release_keys_calls": blur_calls,
+                    "listener_calls_after_dispose": calls_after,
+                    "audio_states_after_dispose": states_after,
+                    "audio_states_recreated": states_third,
+                    "audio_states_final": page.evaluate("window.__audioContexts.map(c => c.state)"),
+                }
             finally:
                 browser.close()
         result["console_errors"] = errors[:20]
@@ -241,7 +299,12 @@ def main():
         result["ok"] = (not errors and fps > 30 and "quit" in result.get("events", [])
                         and result["pause"]["is_paused"]
                         and any(c["state"] == "running" for c in result["audio"])
-                        and max(result["audio_peaks"] or [0]) > 0.001)
+                        and max(result["audio_peaks"] or [0]) > 0.001
+                        and result["dispose"]["blur_release_keys_calls"] > 0
+                        and result["dispose"]["listener_calls_after_dispose"] == 0
+                        and "running" not in result["dispose"]["audio_states_after_dispose"]
+                        and "running" in result["dispose"]["audio_states_recreated"]
+                        and "running" not in result["dispose"]["audio_states_final"])
     except Exception:
         sys.stderr.write("\n".join(consolelog[-60:]) + "\n")
         raise

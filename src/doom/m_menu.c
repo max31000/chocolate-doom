@@ -1102,7 +1102,7 @@ void M_QuitResponse(int key)
 	    S_StartSound(NULL,quitsounds2[(gametic>>2)&7]);
 	else
 	    S_StartSound(NULL,quitsounds[(gametic>>2)&7]);
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
 	// Browser: no blocking wait; quit after the sound (105 VBLs at
 	// 70 Hz = 1.5 s) from the main loop.
 	I_Web_RequestQuit((105 * 1000) / 70);

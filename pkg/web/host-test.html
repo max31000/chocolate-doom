@@ -27,6 +27,8 @@
     <button id="resume">Resume</button>
     <label>Volume <input id="vol" type="range" min="0" max="100" value="100"></label>
     <button id="quit">Quit</button>
+    <button id="dispose">Dispose</button>
+    <button id="restart">Restart</button>
   </div>
   <pre id="log"></pre>
 </main>
@@ -49,33 +51,42 @@ const wad = fetch(wadUrl).then((r) => {
 });
 
 const t0 = performance.now();
-const Module = await createDoom({
-  canvas,
-  locateFile: (name) => new URL(name, moduleUrl).href,
-  blissDataDir: '/data',
-  preRun: [(M) => {
-    M.addRunDependency('wad');
-    wad.then((buf) => {
-      M.FS.writeFile('/data/DOOM1.WAD', new Uint8Array(buf));
-      M.removeRunDependency('wad');
-    }, (e) => log('WAD load failed: ' + e));
-  }],
-  print: (s) => { console.log(s); if (q.has('verbose')) log(s); },
-  onBlissEvent(type, json) {
-    const data = JSON.parse(json || '{}');
-    window.__events.push({ type, data, t: performance.now() - t0 });
-    log(`[event] ${type} ${json}`);
-    if (type === 'started') { statusEl.textContent = `running (${data.game})`; canvas.focus(); }
-    if (type === 'quit') statusEl.textContent = 'quit';
-    if (type === 'error') statusEl.textContent = 'error: ' + data.message;
-    if (type === 'pauseChanged') statusEl.textContent = data.paused ? `paused (${data.source})` : 'running';
-  },
-});
-window.__doom = Module;
-document.getElementById('pause').onclick = () => { Module._bliss_pause(); };
-document.getElementById('resume').onclick = () => { Module._bliss_resume(); canvas.focus(); };
-document.getElementById('vol').oninput = (e) => Module._bliss_set_master_volume(+e.target.value);
-document.getElementById('quit').onclick = () => Module._bliss_quit();
+// Creates a module on the canvas (window.__start() again after dispose = a new game).
+async function start() {
+  const Module = await createDoom({
+    canvas,
+    locateFile: (name) => new URL(name, moduleUrl).href,
+    blissDataDir: '/data',
+    preRun: [(M) => {
+      M.addRunDependency('wad');
+      wad.then((buf) => {
+        M.FS.writeFile('/data/DOOM1.WAD', new Uint8Array(buf));
+        M.removeRunDependency('wad');
+      }, (e) => log('WAD load failed: ' + e));
+    }],
+    print: (s) => { console.log(s); if (q.has('verbose')) log(s); },
+    onBlissEvent(type, json) {
+      const data = JSON.parse(json || '{}');
+      window.__events.push({ type, data, t: performance.now() - t0 });
+      log(`[event] ${type} ${json}`);
+      if (type === 'started') { statusEl.textContent = `running (${data.game})`; canvas.focus(); }
+      if (type === 'quit') statusEl.textContent = 'quit';
+      if (type === 'error') statusEl.textContent = 'error: ' + data.message;
+      if (type === 'pauseChanged') statusEl.textContent = data.paused ? `paused (${data.source})` : 'running';
+    },
+  });
+  window.__doom = Module;
+  return Module;
+}
+window.__start = start;
+await start();
+const M = () => window.__doom;
+document.getElementById('pause').onclick = () => { M()._bliss_pause(); };
+document.getElementById('resume').onclick = () => { M()._bliss_resume(); canvas.focus(); };
+document.getElementById('vol').oninput = (e) => M()._bliss_set_master_volume(+e.target.value);
+document.getElementById('quit').onclick = () => M()._bliss_quit();
+document.getElementById('dispose').onclick = () => M()._bliss_dispose();
+document.getElementById('restart').onclick = async () => { M()._bliss_dispose(); await start(); };
 </script>
 </body>
 </html>

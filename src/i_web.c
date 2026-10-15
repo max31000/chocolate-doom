@@ -16,7 +16,7 @@
 //     Host contract: README.Web.md.
 //
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
 
 #include <stdio.h>
 #include <string.h>
@@ -38,6 +38,7 @@ static boolean host_paused = false;
 static int master_volume = 100;
 static boolean master_volume_installed = false;
 static boolean quit_requested = false;
+static boolean disposed = false;
 static Uint32 quit_at;
 
 void I_Web_Emit(const char *type, const char *json)
@@ -93,6 +94,14 @@ static void JsonString(char *buf, size_t size, const char *s)
     buf[n] = '\0';
 }
 
+static void ExitPointerLock(void)
+{
+    EM_ASM({
+        if (typeof document != "undefined" && document.pointerLockElement)
+            document.exitPointerLock();
+    });
+}
+
 void I_Web_Exit(int code, const char *message)
 {
     if (code == 0)
@@ -110,10 +119,7 @@ void I_Web_Exit(int code, const char *message)
     }
 
     emscripten_cancel_main_loop();
-    EM_ASM({
-        if (typeof document != "undefined" && document.pointerLockElement)
-            document.exitPointerLock();
-    });
+    ExitPointerLock();
     emscripten_unwind_to_js_event_loop();
 }
 
@@ -230,6 +236,7 @@ EMSCRIPTEN_KEEPALIVE int bliss_pause(void)
     {
         host_paused = true;
         I_SetTimerPaused(true);
+        ExitPointerLock();
 #ifndef DISABLE_SDL2MIXER
         Mix_PauseAudio(1);
 #endif
@@ -282,6 +289,56 @@ EMSCRIPTEN_KEEPALIVE int bliss_get_master_volume(void)
     return master_volume;
 }
 
+// Releases all held keys (SDL key-up events for every pressed key). pre.js
+// calls it when the canvas loses focus: the key-ups would go elsewhere and
+// the keys would stay held in the game.
+EMSCRIPTEN_KEEPALIVE void bliss_release_keys(void)
+{
+    if (!disposed && SDL_WasInit(SDL_INIT_VIDEO))
+    {
+        SDL_ResetKeyboard();
+    }
+}
+
+// Tears the module down for good: stops the main loop, closes the audio
+// device and its AudioContext (Mix_CloseAudio + SDL_Quit, which also
+// removes SDL's event handlers), exits the pointer lock and removes the
+// pre.js listeners. No event is emitted. Idempotent; the module is
+// unusable afterwards (create a new one to play again).
+EMSCRIPTEN_KEEPALIVE void bliss_dispose(void)
+{
+    int i;
+
+    if (disposed)
+    {
+        return;
+    }
+
+    disposed = true;
+    emscripten_cancel_main_loop();
+    ExitPointerLock();
+#ifndef DISABLE_SDL2MIXER
+    {
+        int freq, channels;
+        Uint16 format;
+
+        for (i = 0; i < 8 && Mix_QuerySpec(&freq, &format, &channels) != 0; ++i)
+        {
+            Mix_CloseAudio();
+        }
+    }
+#endif
+    SDL_Quit();
+    EM_ASM({
+        if (Module["blissDisposeInternal"]) Module["blissDisposeInternal"]();
+    });
+}
+
+boolean I_Web_Disposed(void)
+{
+    return disposed;
+}
+
 // Quits the game on the next frame (no quit sound / delay): runs the exit
 // functions, closes the audio device and emits "quit".
 EMSCRIPTEN_KEEPALIVE void bliss_quit(void)
@@ -289,4 +346,4 @@ EMSCRIPTEN_KEEPALIVE void bliss_quit(void)
     I_Web_RequestQuit(0);
 }
 
-#endif // __EMSCRIPTEN__
+#endif // BLISS_WEB

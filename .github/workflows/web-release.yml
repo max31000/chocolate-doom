@@ -22,6 +22,8 @@ jobs:
     container: emscripten/emsdk@sha256:e077d54e2b8970575ebc4f185ac1de0b95c05f2b266134d4ba27449af7aebf65
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Install build tools
         run: |
@@ -46,6 +48,8 @@ jobs:
           mkdir -p "dist/${NAME}"
           cp build-web/src/chocolate-doom.js build-web/src/chocolate-doom.wasm COPYING.md "dist/${NAME}/"
           cp pkg/web/RELEASE-README.md "dist/${NAME}/README.md"
+          printf '\nBuilt from %s (commit %s) of %s by the "Web build" workflow.\n' \
+            "$GITHUB_REF_NAME" "$GITHUB_SHA" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" >> "dist/${NAME}/README.md"
           # Files at the archive root.
           tar -C "dist/${NAME}" -czf "dist/${NAME}.tgz" .
           (cd dist && sha256sum "${NAME}.tgz" > "${NAME}.tgz.sha256")

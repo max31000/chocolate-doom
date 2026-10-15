@@ -85,6 +85,10 @@ void OPL_Shutdown(void);
 
 void OPL_SetSampleRate(unsigned int rate);
 
+// Skip the chip detection for the software emulator driver.
+
+void OPL_SkipEmulatorDetection(int skip);
+
 // Write to one of the OPL I/O ports:
 
 void OPL_WritePort(opl_port_t port, unsigned int value);

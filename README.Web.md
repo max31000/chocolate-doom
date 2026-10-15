@@ -6,10 +6,14 @@ adds a browser build of **Chocolate Doom** (`chocolate-doom` target only) for th
 (<https://mvv42.ru/bliss/>). It is the unchanged Chocolate Doom engine — same renderer, same
 35 Hz game logic, same OPL (AdLib/Sound Blaster) music emulation — with a thin host layer:
 
-* `src/i_web.c`, `src/i_web.h` — events to the host page, host pause, master volume.
+* `src/i_web.c`, `src/i_web.h` — events to the host page, host pause, master volume, dispose.
 * `src/doom/d_web.c`, `src/doom/d_web.h` — browser main loop, Doom events/functions.
 * `pkg/web/pre.js`, `pkg/web/library_bliss.js` — JS side (data dir, canvas, pointer lock, audio).
-* small `#ifdef __EMSCRIPTEN__` patches (no change to native builds): `D_DoomLoop` runs from
+* small `#ifdef BLISS_WEB` patches. `BLISS_WEB` is defined only for the `chocolate-doom` target
+  and the `doom` library in Emscripten builds (`src/CMakeLists.txt`), and `i_web.c` is compiled
+  into that target only: native builds and the heretic/hexen/strife targets are unchanged.
+  The OPL library gets a runtime switch (`OPL_SkipEmulatorDetection`, off by default) that
+  only the Doom web build turns on. The patches: `D_DoomLoop` runs from
   `emscripten_set_main_loop` (requestAnimationFrame) instead of `while (1)`; `TryRunTics`
   and the screen wipe never sleep (a frame without a new tic draws nothing); the quit sound
   delay is a deferred quit; ENDOOM is skipped; `I_Quit`/`I_Error` emit `quit`/`error` and stop
@@ -81,20 +85,22 @@ are **not persisted** (a new module instance starts from defaults).
 | `error` | `{"code":-1,"message":"..."}` — I_Error (e.g. missing/invalid IWAD) |
 
 After `quit`/`error` the main loop is stopped, the audio device closed and the SDL event
-listeners removed; the module stays idle (no exception to the host). Create a new module to
-play again.
+listeners removed; the module stays idle (no exception to the host). Call `_bliss_dispose()`
+then (it also removes the pre.js listeners) and create a new module to play again.
 
 ### Exported functions (`Module._name(...)` or `Module.ccall`)
 
 | function | |
 |---|---|
-| `_bliss_pause()` / `_bliss_resume()` | host pause: no tics, game clock frozen (no catch-up afterwards), audio paused. Independent of the in-game Pause key |
+| `_bliss_dispose()` | tears the module down for good, at any time after the promise resolved (running, paused or after `quit`/`error`): cancels the main loop, exits the pointer lock, `Mix_CloseAudio` + `SDL_Quit` (closes the AudioContext, removes SDL's event handlers), removes every pre.js window/document/canvas listener (AbortController). No event. Idempotent; the module is unusable afterwards — create a new module (same canvas is fine) to play again |
+| `_bliss_pause()` / `_bliss_resume()` | host pause: no tics, game clock frozen (no catch-up afterwards), audio paused, pointer lock released. Independent of the in-game Pause key |
 | `_bliss_is_paused()` | 1 while host-paused |
-| `_bliss_set_master_volume(0..100)` → int | linear gain on all game audio (sound effects + music), on top of the in-game volume sliders. `_bliss_get_master_volume()` |
+| `_bliss_set_master_volume(0..100)` → int | **linear** gain (`sample * v / 100`, same curve as the other Bliss engines) on all game audio (sound effects + music), on top of the in-game volume sliders. `_bliss_get_master_volume()` |
 | `_bliss_set_mouse_sensitivity(0..20)` → int | as Options → Mouse Sensitivity (menu slider 0..9, default 5). `_bliss_get_mouse_sensitivity()` |
 | `_bliss_set_window_size(w, h)` | canvas backing store size (320x200 .. 4096x4096); adjusted to 4:3 like a native window resize |
 | `_bliss_quit()` | quit on the next frame (no quit sound), emits `quit` |
 | `_bliss_mouse_wanted()` | 1 while the game wants the mouse (used by pre.js) |
+| `_bliss_release_keys()` | key-up for every held key (pre.js calls it on canvas `blur`, so keys do not stick when focus moves to host UI) |
 
 ### Canvas, input, audio
 
@@ -108,7 +114,8 @@ play again.
 * **Keyboard** is bound to the canvas (`SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT="#canvas"`, text
   input off): the game sees keys only while the canvas has focus; F1..F12, arrows, Tab, Ctrl
   combos are prevented from reaching the browser then (F5 does not reload). Focus the canvas
-  when the game page opens and after closing host dialogs. Alt+Enter (full screen) is ignored —
+  when the game page opens and after closing host dialogs. When the canvas loses focus, held
+  keys are released (no stuck movement/fire). Alt+Enter (full screen) is ignored —
   full screen belongs to the host. Vanilla controls: arrows move/turn, Ctrl fire, Space use,
   Shift run, Alt strafe, 1..7 weapons, Tab map, Esc menu.
 * **Mouse** (optional): a click on the canvas requests the pointer lock while the game wants
@@ -136,5 +143,6 @@ host. Other IWADs work too (`blissIwad`), if the host is allowed to serve them.
 `pkg/web/host_test.py` (Python Playwright) serves a directory, opens the page **headless and
 muted** (Chromium `--mute-audio`, Firefox `media.volume_scale=0.0`; pointer lock stubbed),
 starts a new game from the menu, plays ~60 s with the keyboard while measuring frame times,
-checks the AudioContext and audio output, host pause, volume, quit through the menu, and fails
-on console errors. See the docstring for the command line.
+checks the AudioContext and audio output, host pause, volume, quit through the menu, key
+release on canvas blur, then create → dispose (twice) → no pre.js listener reaches the module
+and no AudioContext runs → create again works; fails on console errors. See the docstring for the command line.

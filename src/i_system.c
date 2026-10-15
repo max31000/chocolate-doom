@@ -265,7 +265,7 @@ void I_Quit (void)
 
     SDL_Quit();
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     I_Web_Exit(0, NULL);
 #else
     exit(0);
@@ -290,7 +290,7 @@ void I_Error (const char *error, ...)
     if (already_quitting)
     {
         fprintf(stderr, "Warning: recursive call to I_Error detected.\n");
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
         I_Web_Exit(-1, "recursive I_Error");
 #else
         exit(-1);
@@ -336,7 +336,7 @@ void I_Error (const char *error, ...)
     // game exits with an error.
     //
     exit_gui_popup = !M_ParmExists("-nogui");
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // The host page shows the message ("error" event); SDL would alert().
     exit_gui_popup = false;
 #endif
@@ -354,7 +354,7 @@ void I_Error (const char *error, ...)
 
     SDL_Quit();
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     I_Web_Exit(-1, msgbuf);
 #else
     exit(-1);

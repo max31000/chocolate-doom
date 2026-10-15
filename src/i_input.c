@@ -397,7 +397,7 @@ static void MapMouseWheelToButtons(SDL_MouseWheelEvent *wheel)
 
 void I_HandleMouseEvent(SDL_Event *sdlevent)
 {
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // Web: the mouse belongs to the game only while the pointer is locked
     // to the canvas. Releases always pass, so no button gets stuck.
     if (sdlevent->type != SDL_MOUSEBUTTONUP && !I_Web_PointerLocked())
@@ -452,7 +452,7 @@ void I_ReadMouse(void)
 
     SDL_GetRelativeMouseState(&x, &y);
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // Web: without the pointer lock these are cursor movements over the
     // canvas, not mouse look.
     if (!I_Web_PointerLocked())

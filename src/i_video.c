@@ -23,7 +23,7 @@
 #include "SDL.h"
 #include "SDL_opengl.h"
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
 #include <emscripten.h>
 #endif
 
@@ -266,7 +266,7 @@ void I_DisplayFPSDots(boolean dots_on)
 
 static void SetShowCursor(boolean show)
 {
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // Web: the grab is a pointer lock, which browsers only grant from a
     // click. pre.js requests it when the canvas is clicked while
     // bliss_mouse_wanted() is true; here the lock is only released when
@@ -405,7 +405,7 @@ static void HandleWindowEvent(SDL_WindowEvent *event)
 static boolean ToggleFullScreenKeyShortcut(SDL_Keysym *sym)
 {
     Uint16 flags = (KMOD_LALT | KMOD_RALT);
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // Web: full screen belongs to the host page.
     return false;
 #endif
@@ -1241,7 +1241,7 @@ static void SetVideoMode(void)
     // retina displays, especially when using small window sizes.
     window_flags |= SDL_WINDOW_ALLOW_HIGHDPI;
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // Web: the canvas backing store is exactly window_width x
     // window_height and the host page scales it with CSS. RESIZABLE would
     // make SDL follow the page/CSS size, HIGHDPI would set the canvas CSS
@@ -1471,7 +1471,7 @@ void I_InitGraphics(void)
 
     SetSDLVideoDriver();
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // Web: keyboard events only while the canvas has focus (pre.js maps
     // "#canvas" to the host's canvas element), so the host page's DOM keeps
     // working. Full screen belongs to the host page.
@@ -1484,7 +1484,7 @@ void I_InitGraphics(void)
         I_Error("Failed to initialize video: %s", SDL_GetError());
     }
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
     // SDL starts with text input on; while it is on, the Emscripten
     // backend lets the browser handle printable keys (Space would scroll
     // the page). The game turns it on itself when typing (save names).
@@ -1583,7 +1583,7 @@ void I_BindVideoVariables(void)
     M_BindIntVariable("usegamma",                  &usegamma);
     M_BindIntVariable("png_screenshots",           &png_screenshots);
 }
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
 
 // Web: sets the canvas backing store size (the host page scales the canvas
 // with CSS). Like a window resize natively: the size is adjusted to the

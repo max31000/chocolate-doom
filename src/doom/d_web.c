@@ -16,7 +16,7 @@
 //     Doom-specific host functions. Host contract: README.Web.md.
 //
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
 
 #include <stdio.h>
 
@@ -79,6 +79,12 @@ static void CheckGameEvents(void)
 
 static void Frame(void)
 {
+    if (I_Web_Disposed())
+    {
+        emscripten_cancel_main_loop();
+        return;
+    }
+
     if (I_Web_QuitDue())
     {
         I_Quit();
@@ -141,4 +147,4 @@ EMSCRIPTEN_KEEPALIVE int bliss_get_mouse_sensitivity(void)
     return mouseSensitivity;
 }
 
-#endif // __EMSCRIPTEN__
+#endif // BLISS_WEB

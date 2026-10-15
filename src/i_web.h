@@ -20,7 +20,7 @@
 #ifndef __I_WEB__
 #define __I_WEB__
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
 
 #include "doomtype.h"
 
@@ -54,10 +54,13 @@ void I_Web_RequestQuit(int delay_ms);
 boolean I_Web_QuitDue(void);
 boolean I_Web_QuitRequested(void);
 
+// True after bliss_dispose().
+boolean I_Web_Disposed(void);
+
 // i_timer.c: freezes I_GetTime()/I_GetTimeMS() while paused, so the game
 // does not try to catch up on the paused time afterwards.
 void I_SetTimerPaused(boolean paused);
 
-#endif // __EMSCRIPTEN__
+#endif // BLISS_WEB
 
 #endif

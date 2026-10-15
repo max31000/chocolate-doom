@@ -754,7 +754,7 @@ void TryRunTics (void)
                 return;
             }
 
-#ifdef __EMSCRIPTEN__
+#ifdef BLISS_WEB
             // Browser main loop: never block, try again next frame.
             if (i_web_nonblocking_loop)
             {

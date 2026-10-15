@@ -1728,6 +1728,9 @@ static boolean I_OPL_InitMusic(void)
 
     OPL_SetSampleRate(snd_samplerate);
 
+#ifdef BLISS_WEB
+    OPL_SkipEmulatorDetection(1);
+#endif
     chip_type = OPL_Init(opl_io_port);
     if (chip_type == OPL_INIT_NONE)
     {

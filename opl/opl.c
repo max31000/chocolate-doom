@@ -55,6 +55,16 @@ static int init_stage_reg_writes = 1;
 
 unsigned int opl_sample_rate = 22050;
 
+static int skip_emulator_detection = 0;
+
+// Skip the chip detection for the software emulator driver (Bliss web
+// build: the detection would block the browser main thread forever).
+
+void OPL_SkipEmulatorDetection(int skip)
+{
+    skip_emulator_detection = skip;
+}
+
 //
 // Init/shutdown code.
 //
@@ -82,13 +92,13 @@ static opl_init_result_t InitDriver(opl_driver_t *_driver,
     driver = _driver;
     init_stage_reg_writes = 1;
 
-#ifdef __EMSCRIPTEN__
-    // The detection waits (OPL_Delay) for the emulator's timers, which only
-    // advance in the audio callback. In a browser without threads that
-    // callback cannot run while we wait (it needs ASYNCIFY). The software
-    // emulator is the only driver here and it always is an OPL3, which
-    // is what detection reports for it natively.
-    if (_driver == &opl_sdl_driver)
+#ifndef DISABLE_SDL2MIXER
+    // Bliss web build (OPL_SkipEmulatorDetection): the detection waits
+    // (OPL_Delay) for the emulator's timers, which only advance in the
+    // audio callback. In a browser without threads that callback cannot
+    // run while we wait. The software emulator always is an OPL3, which is
+    // what detection reports for it natively.
+    if (skip_emulator_detection && _driver == &opl_sdl_driver)
     {
         result1 = result2 = OPL_INIT_OPL3;
     }

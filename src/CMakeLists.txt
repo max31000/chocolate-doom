@@ -86,7 +86,6 @@ set(GAME_SOURCE_FILES
     i_timer.c           i_timer.h
     i_video.c           i_video.h
     i_videohr.c         i_videohr.h
-    i_web.c             i_web.h
     i_winmusic.c
     midifallback.c      midifallback.h
     midifile.c          midifile.h
@@ -170,6 +169,13 @@ endif()
 
 target_include_directories("${PROGRAM_PREFIX}doom" PRIVATE ${GAME_INCLUDE_DIRS})
 target_link_libraries("${PROGRAM_PREFIX}doom" doom ${EXTRA_LIBS})
+if (DEFINED EMSCRIPTEN)
+    # Bliss web host layer (README.Web.md): Doom only. BLISS_WEB gates the
+    # web patches in the shared sources, which are compiled per game.
+    target_sources("${PROGRAM_PREFIX}doom" PRIVATE i_web.c i_web.h)
+    target_compile_definitions("${PROGRAM_PREFIX}doom" PRIVATE BLISS_WEB=1)
+    target_compile_definitions(doom PRIVATE BLISS_WEB=1)
+endif()
 set_target_properties("${PROGRAM_PREFIX}doom" PROPERTIES COMPILE_FLAGS "${SDL_FLAGS}")
 
 if(MSVC)
@@ -266,7 +272,7 @@ if (DEFINED EMSCRIPTEN)
     # factory createDoom, no game data inside, browser main loop
     # (requestAnimationFrame), no ASYNCIFY, no pthreads.
     set(DOOM_WEB_DIR "${PROJECT_SOURCE_DIR}/pkg/web")
-    set(DOOM_WEB_EXPORTS "_main,_bliss_pause,_bliss_resume,_bliss_is_paused,_bliss_set_master_volume,_bliss_get_master_volume,_bliss_set_mouse_sensitivity,_bliss_get_mouse_sensitivity,_bliss_set_window_size,_bliss_mouse_wanted,_bliss_quit")
+    set(DOOM_WEB_EXPORTS "_main,_bliss_pause,_bliss_resume,_bliss_is_paused,_bliss_set_master_volume,_bliss_get_master_volume,_bliss_set_mouse_sensitivity,_bliss_get_mouse_sensitivity,_bliss_set_window_size,_bliss_mouse_wanted,_bliss_quit,_bliss_dispose,_bliss_release_keys")
     set(DOOM_WEB_LINK_FLAGS
         "${SDL_FLAGS} -sSDL2_MIXER_FORMATS=[] -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sSTACK_SIZE=1MB"
         "-sENVIRONMENT=web -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDoom"
