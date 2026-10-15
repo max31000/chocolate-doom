@@ -1,0 +1,89 @@
+name: Web build
+
+# Builds the Emscripten (WebAssembly) version of Chocolate Doom for the Bliss host page.
+# - push / pull request: build check, the package is kept as a workflow artifact.
+# - tag web-vX.Y.Z: the package doom-web-X.Y.Z.tgz (chocolate-doom.js + .wasm, no game data)
+#   is attached to the GitHub release of that tag (created if missing).
+on:
+  push:
+    branches: [bliss-web]
+    tags: ['web-v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # emscripten/emsdk:6.0.10
+    container: emscripten/emsdk@sha256:e077d54e2b8970575ebc4f185ac1de0b95c05f2b266134d4ba27449af7aebf65
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ninja-build cmake
+
+      - name: Build
+        run: |
+          emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_SDL2_NET=OFF
+          cmake --build build-web --target chocolate-doom
+
+      - name: Package
+        id: pkg
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/web-v* ]]; then
+            VERSION="${GITHUB_REF_NAME#web-v}"
+          else
+            VERSION="0.0.0-${GITHUB_SHA::7}"
+          fi
+          NAME="doom-web-${VERSION}"
+          mkdir -p "dist/${NAME}"
+          cp build-web/src/chocolate-doom.js build-web/src/chocolate-doom.wasm COPYING.md "dist/${NAME}/"
+          cp pkg/web/RELEASE-README.md "dist/${NAME}/README.md"
+          # Files at the archive root.
+          tar -C "dist/${NAME}" -czf "dist/${NAME}.tgz" .
+          (cd dist && sha256sum "${NAME}.tgz" > "${NAME}.tgz.sha256")
+          ls -l "dist/${NAME}" dist
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.pkg.outputs.name }}
+          path: |
+            dist/${{ steps.pkg.outputs.name }}.tgz
+            dist/${{ steps.pkg.outputs.name }}.tgz.sha256
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/web-v')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: web-release-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#web-v}"
+          ls -l dist
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "Web build $VERSION" \
+              --notes "Chocolate Doom web build (Emscripten 6.0.10). Contains chocolate-doom.js (ES module, factory createDoom) and chocolate-doom.wasm. No game data (the host supplies the IWAD). Host contract: README.Web.md."
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/*.tgz dist/*.sha256 --repo "$GITHUB_REPOSITORY" --clobber
