@@ -13,6 +13,7 @@ add_library(doom STATIC
                             d_englsh.h
             d_items.c       d_items.h
             d_main.c        d_main.h
+            d_web.c         d_web.h
             d_net.c
                             doomdata.h
             doomdef.c       doomdef.h

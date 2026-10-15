@@ -25,6 +25,7 @@
 #include "doomtype.h"
 #include "d_event.h"
 #include "i_input.h"
+#include "i_web.h"
 #include "m_argv.h"
 #include "m_config.h"
 
@@ -396,6 +397,15 @@ static void MapMouseWheelToButtons(SDL_MouseWheelEvent *wheel)
 
 void I_HandleMouseEvent(SDL_Event *sdlevent)
 {
+#ifdef __EMSCRIPTEN__
+    // Web: the mouse belongs to the game only while the pointer is locked
+    // to the canvas. Releases always pass, so no button gets stuck.
+    if (sdlevent->type != SDL_MOUSEBUTTONUP && !I_Web_PointerLocked())
+    {
+        return;
+    }
+#endif
+
     switch (sdlevent->type)
     {
         case SDL_MOUSEBUTTONDOWN:
@@ -442,7 +452,16 @@ void I_ReadMouse(void)
 
     SDL_GetRelativeMouseState(&x, &y);
 
-    if (x != 0 || y != 0) 
+#ifdef __EMSCRIPTEN__
+    // Web: without the pointer lock these are cursor movements over the
+    // canvas, not mouse look.
+    if (!I_Web_PointerLocked())
+    {
+        return;
+    }
+#endif
+
+    if (x != 0 || y != 0)
     {
         ev.type = ev_mouse;
         ev.data1 = mouse_button_state;

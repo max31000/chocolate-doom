@@ -74,6 +74,8 @@
 #include "statdump.h"
 
 #include "d_main.h"
+#include "d_web.h"
+#include "i_web.h"
 
 #include "doom_icon.c"
 
@@ -409,14 +411,28 @@ void D_RunFrame()
     static int wipestart;
     static boolean wipe;
 
+#ifdef __EMSCRIPTEN__
+    int oldgametic;
+#endif
+
     if (wipe)
     {
+#ifdef __EMSCRIPTEN__
+        // Browser main loop: no waiting, the next frame comes anyway.
+        nowtime = I_GetTime ();
+        tics = nowtime - wipestart;
+        if (tics <= 0)
+        {
+            return;
+        }
+#else
         do
         {
             nowtime = I_GetTime ();
             tics = nowtime - wipestart;
             I_Sleep(1);
         } while (tics <= 0);
+#endif
 
         wipestart = nowtime;
         wipe = !wipe_ScreenWipe(wipe_Melt
@@ -430,7 +446,21 @@ void D_RunFrame()
     // frame syncronous IO operations
     I_StartFrame ();
 
+#ifdef __EMSCRIPTEN__
+    oldgametic = gametic;
+#endif
+
     TryRunTics (); // will run at least one tic
+
+#ifdef __EMSCRIPTEN__
+    // Non-blocking TryRunTics: nothing new to show until the next tic
+    // (35 Hz game, display refresh usually faster). The canvas keeps the
+    // last frame.
+    if (gametic == oldgametic)
+    {
+        return;
+    }
+#endif
 
     S_UpdateSounds (players[consoleplayer].mo);// move positional sounds
 
@@ -476,6 +506,10 @@ void D_DoomLoop (void)
     I_InitGraphics();
     EnableLoadingDisk();
 
+#ifdef __EMSCRIPTEN__
+    i_web_nonblocking_loop = true;
+#endif
+
     TryRunTics();
 
     V_RestoreBuffer();
@@ -488,10 +522,15 @@ void D_DoomLoop (void)
         wipegamestate = gamestate;
     }
 
+#ifdef __EMSCRIPTEN__
+    // Browser: one D_RunFrame() per display frame (requestAnimationFrame).
+    D_Web_StartMainLoop(gamedescription);
+#else
     while (1)
     {
         D_RunFrame();
     }
+#endif
 }
 
 

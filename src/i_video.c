@@ -23,6 +23,10 @@
 #include "SDL.h"
 #include "SDL_opengl.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -39,6 +43,7 @@
 #include "i_system.h"
 #include "i_timer.h"
 #include "i_video.h"
+#include "i_web.h"
 #include "m_argv.h"
 #include "m_config.h"
 #include "m_misc.h"
@@ -261,6 +266,21 @@ void I_DisplayFPSDots(boolean dots_on)
 
 static void SetShowCursor(boolean show)
 {
+#ifdef __EMSCRIPTEN__
+    // Web: the grab is a pointer lock, which browsers only grant from a
+    // click. pre.js requests it when the canvas is clicked while
+    // bliss_mouse_wanted() is true; here the lock is only released when
+    // the game no longer wants the mouse (menu, intermission, ...).
+    if (show)
+    {
+        EM_ASM({
+            if (typeof document != "undefined" && document.pointerLockElement)
+                document.exitPointerLock();
+        });
+    }
+    SDL_GetRelativeMouseState(NULL, NULL);
+    return;
+#endif
     if (!screensaver_mode)
     {
         // When the cursor is hidden, grab the input.
@@ -385,6 +405,10 @@ static void HandleWindowEvent(SDL_WindowEvent *event)
 static boolean ToggleFullScreenKeyShortcut(SDL_Keysym *sym)
 {
     Uint16 flags = (KMOD_LALT | KMOD_RALT);
+#ifdef __EMSCRIPTEN__
+    // Web: full screen belongs to the host page.
+    return false;
+#endif
 #if defined(__MACOSX__)
     flags |= (KMOD_LGUI | KMOD_RGUI);
 #endif
@@ -1217,6 +1241,15 @@ static void SetVideoMode(void)
     // retina displays, especially when using small window sizes.
     window_flags |= SDL_WINDOW_ALLOW_HIGHDPI;
 
+#ifdef __EMSCRIPTEN__
+    // Web: the canvas backing store is exactly window_width x
+    // window_height and the host page scales it with CSS. RESIZABLE would
+    // make SDL follow the page/CSS size, HIGHDPI would set the canvas CSS
+    // size itself.
+    window_flags = 0;
+    fullscreen = false;
+#endif
+
     if (fullscreen)
     {
         if (fullscreen_width == 0 && fullscreen_height == 0)
@@ -1438,10 +1471,25 @@ void I_InitGraphics(void)
 
     SetSDLVideoDriver();
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) 
+#ifdef __EMSCRIPTEN__
+    // Web: keyboard events only while the canvas has focus (pre.js maps
+    // "#canvas" to the host's canvas element), so the host page's DOM keeps
+    // working. Full screen belongs to the host page.
+    SDL_SetHint(SDL_HINT_EMSCRIPTEN_KEYBOARD_ELEMENT, "#canvas");
+    fullscreen = false;
+#endif
+
+    if (SDL_Init(SDL_INIT_VIDEO) < 0)
     {
         I_Error("Failed to initialize video: %s", SDL_GetError());
     }
+
+#ifdef __EMSCRIPTEN__
+    // SDL starts with text input on; while it is on, the Emscripten
+    // backend lets the browser handle printable keys (Space would scroll
+    // the page). The game turns it on itself when typing (save names).
+    SDL_StopTextInput();
+#endif
 
     // When in screensaver mode, run full screen and auto detect
     // screen dimensions (don't change video mode)
@@ -1535,3 +1583,34 @@ void I_BindVideoVariables(void)
     M_BindIntVariable("usegamma",                  &usegamma);
     M_BindIntVariable("png_screenshots",           &png_screenshots);
 }
+#ifdef __EMSCRIPTEN__
+
+// Web: sets the canvas backing store size (the host page scales the canvas
+// with CSS). Like a window resize natively: the size is adjusted to the
+// aspect ratio (4:3 with aspect_ratio_correct) a moment later.
+EMSCRIPTEN_KEEPALIVE void bliss_set_window_size(int w, int h)
+{
+    if (w < SCREENWIDTH || h < SCREENHEIGHT || w > 4096 || h > 4096)
+    {
+        return;
+    }
+
+    window_width = w;
+    window_height = h;
+
+    if (screen != NULL)
+    {
+        SDL_SetWindowSize(screen, w, h);
+        need_resize = true;
+        last_resize_time = SDL_GetTicks();
+    }
+}
+
+// Web: true while the game wants the mouse (playing a level, mouse
+// enabled); pre.js requests the pointer lock on a canvas click then.
+EMSCRIPTEN_KEEPALIVE int bliss_mouse_wanted(void)
+{
+    return initialized && MouseShouldBeGrabbed() ? 1 : 0;
+}
+
+#endif

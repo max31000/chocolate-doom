@@ -26,6 +26,7 @@
 #include "i_system.h"
 #include "i_timer.h"
 #include "i_video.h"
+#include "i_web.h"
 
 #include "m_argv.h"
 #include "m_fixed.h"
@@ -752,6 +753,14 @@ void TryRunTics (void)
             {
                 return;
             }
+
+#ifdef __EMSCRIPTEN__
+            // Browser main loop: never block, try again next frame.
+            if (i_web_nonblocking_loop)
+            {
+                return;
+            }
+#endif
 
             I_Sleep(1);
         }

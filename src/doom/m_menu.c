@@ -34,6 +34,7 @@
 #include "i_swap.h"
 #include "i_system.h"
 #include "i_timer.h"
+#include "i_web.h"
 #include "i_video.h"
 #include "m_misc.h"
 #include "v_video.h"
@@ -1101,7 +1102,14 @@ void M_QuitResponse(int key)
 	    S_StartSound(NULL,quitsounds2[(gametic>>2)&7]);
 	else
 	    S_StartSound(NULL,quitsounds[(gametic>>2)&7]);
+#ifdef __EMSCRIPTEN__
+	// Browser: no blocking wait; quit after the sound (105 VBLs at
+	// 70 Hz = 1.5 s) from the main loop.
+	I_Web_RequestQuit((105 * 1000) / 70);
+	return;
+#else
 	I_WaitVBL(105);
+#endif
     }
     I_Quit ();
 }

@@ -82,8 +82,22 @@ static opl_init_result_t InitDriver(opl_driver_t *_driver,
     driver = _driver;
     init_stage_reg_writes = 1;
 
-    result1 = OPL_Detect();
-    result2 = OPL_Detect();
+#ifdef __EMSCRIPTEN__
+    // The detection waits (OPL_Delay) for the emulator's timers, which only
+    // advance in the audio callback. In a browser without threads that
+    // callback cannot run while we wait (it needs ASYNCIFY). The software
+    // emulator is the only driver here and it always is an OPL3, which
+    // is what detection reports for it natively.
+    if (_driver == &opl_sdl_driver)
+    {
+        result1 = result2 = OPL_INIT_OPL3;
+    }
+    else
+#endif
+    {
+        result1 = OPL_Detect();
+        result2 = OPL_Detect();
+    }
     if (result1 == OPL_INIT_NONE || result2 == OPL_INIT_NONE)
     {
         printf("OPL_Init: No OPL detected using '%s' driver.\n", _driver->name);

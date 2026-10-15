@@ -19,6 +19,7 @@
 #include "SDL.h"
 
 #include "i_timer.h"
+#include "i_web.h"
 #include "doomtype.h"
 
 //
@@ -27,6 +28,41 @@
 //
 
 static Uint32 basetime = 0;
+
+#ifdef __EMSCRIPTEN__
+
+// Web: the host can pause the game (bliss_pause). The game clock stands
+// still while paused, so the game does not catch up on the paused time.
+
+static boolean timer_paused = false;
+static Uint32 paused_since = 0;
+static Uint32 paused_total = 0;
+
+void I_SetTimerPaused(boolean paused)
+{
+    if (paused && !timer_paused)
+    {
+        paused_since = SDL_GetTicks();
+    }
+    else if (!paused && timer_paused)
+    {
+        paused_total += SDL_GetTicks() - paused_since;
+    }
+
+    timer_paused = paused;
+}
+
+static Uint32 GetTicks(void)
+{
+    Uint32 ticks = timer_paused ? paused_since : SDL_GetTicks();
+
+    // Never 0: basetime == 0 means "not set yet".
+    return ticks - paused_total + 1;
+}
+
+#define SDL_GetTicks GetTicks
+
+#endif
 
 int  I_GetTime (void)
 {

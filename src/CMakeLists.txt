@@ -86,6 +86,7 @@ set(GAME_SOURCE_FILES
     i_timer.c           i_timer.h
     i_video.c           i_video.h
     i_videohr.c         i_videohr.h
+    i_web.c             i_web.h
     i_winmusic.c
     midifallback.c      midifallback.h
     midifile.c          midifile.h
@@ -261,7 +262,21 @@ endif()
 if (DEFINED EMSCRIPTEN)
     set_target_properties("${PROGRAM_PREFIX}setup" PROPERTIES LINK_FLAGS "${SDL_FLAGS} -s ALLOW_MEMORY_GROWTH=1 -s ASYNCIFY=1 -s EXPORTED_FUNCTIONS=_main,ccall,cwrap,FS,ENV,PATH,ERRNO_CODES")
     set_target_properties("${PROGRAM_PREFIX}strife" PROPERTIES LINK_FLAGS "${SDL_FLAGS} -s ALLOW_MEMORY_GROWTH=1 -s ASYNCIFY=1 -s EXPORTED_FUNCTIONS=_main,ccall,cwrap,FS,ENV,PATH,ERRNO_CODES")
-    set_target_properties("${PROGRAM_PREFIX}doom" PROPERTIES LINK_FLAGS "${SDL_FLAGS} -s ALLOW_MEMORY_GROWTH=1 -s ASYNCIFY=1 -s EXPORTED_FUNCTIONS=_main,ccall,cwrap,FS,ENV,PATH,ERRNO_CODES")
+    # Doom: web build for the Bliss host page (README.Web.md). ES module
+    # factory createDoom, no game data inside, browser main loop
+    # (requestAnimationFrame), no ASYNCIFY, no pthreads.
+    set(DOOM_WEB_DIR "${PROJECT_SOURCE_DIR}/pkg/web")
+    set(DOOM_WEB_EXPORTS "_main,_bliss_pause,_bliss_resume,_bliss_is_paused,_bliss_set_master_volume,_bliss_get_master_volume,_bliss_set_mouse_sensitivity,_bliss_get_mouse_sensitivity,_bliss_set_window_size,_bliss_mouse_wanted,_bliss_quit")
+    set(DOOM_WEB_LINK_FLAGS
+        "${SDL_FLAGS} -sSDL2_MIXER_FORMATS=[] -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB -sSTACK_SIZE=1MB"
+        "-sENVIRONMENT=web -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createDoom"
+        "-sEXPORTED_FUNCTIONS=${DOOM_WEB_EXPORTS}"
+        "-sEXPORTED_RUNTIME_METHODS=FS,ccall,cwrap,addRunDependency,removeRunDependency,UTF8ToString"
+        "--pre-js ${DOOM_WEB_DIR}/pre.js --js-library ${DOOM_WEB_DIR}/library_bliss.js")
+    string(REPLACE ";" " " DOOM_WEB_LINK_FLAGS "${DOOM_WEB_LINK_FLAGS}")
+    set_target_properties("${PROGRAM_PREFIX}doom" PROPERTIES LINK_FLAGS "${DOOM_WEB_LINK_FLAGS}")
+    set_property(TARGET "${PROGRAM_PREFIX}doom" APPEND PROPERTY LINK_DEPENDS
+                 "${DOOM_WEB_DIR}/pre.js" "${DOOM_WEB_DIR}/library_bliss.js")
     set_target_properties("${PROGRAM_PREFIX}heretic" PROPERTIES LINK_FLAGS "${SDL_FLAGS} -s ALLOW_MEMORY_GROWTH=1 -s ASYNCIFY=1 -s EXPORTED_FUNCTIONS=_main,ccall,cwrap,FS,ENV,PATH,ERRNO_CODES")
     set_target_properties("${PROGRAM_PREFIX}hexen" PROPERTIES LINK_FLAGS "${SDL_FLAGS} -s ALLOW_MEMORY_GROWTH=1 -s ASYNCIFY=1 -s EXPORTED_FUNCTIONS=_main,ccall,cwrap,FS,ENV,PATH,ERRNO_CODES")
 endif()
