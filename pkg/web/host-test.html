@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doom web host test</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #111; color: #ddd; font: 13px/1.4 system-ui, sans-serif; }
+  main { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px; }
+  /* The canvas backing store is 4:3 (960x720 by default); the host only scales it. */
+  #game { width: min(960px, 100vw - 32px); aspect-ratio: 4 / 3; height: auto; background: #000;
+          display: block; outline: none; }
+  #game:focus-visible { outline: 2px solid #c33; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button { font: inherit; }
+  #log { width: min(960px, 100vw - 32px); height: 140px; overflow: auto; background: #000;
+         color: #9c9; margin: 0; padding: 6px; box-sizing: border-box; font: 12px monospace; }
+</style>
+</head>
+<body>
+<main>
+  <canvas id="game"></canvas>
+  <div class="bar">
+    <span id="status">loading…</span>
+    <button id="pause">Pause</button>
+    <button id="resume">Resume</button>
+    <label>Volume <input id="vol" type="range" min="0" max="100" value="100"></label>
+    <button id="quit">Quit</button>
+  </div>
+  <pre id="log"></pre>
+</main>
+<script type="module">
+// Dev host page for the web build (README.Web.md).
+// Query: ?module=<url of chocolate-doom.js>&wad=<url of DOOM1.WAD>
+const q = new URLSearchParams(location.search);
+const moduleUrl = new URL(q.get('module') || '../../build-web/src/chocolate-doom.js', location.href).href;
+const wadUrl = q.get('wad') || 'DOOM1.WAD';
+const canvas = document.getElementById('game');
+const logEl = document.getElementById('log');
+const statusEl = document.getElementById('status');
+const log = (s) => { logEl.textContent += s + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+window.__events = [];
+
+const { default: createDoom } = await import(moduleUrl);
+const wad = fetch(wadUrl).then((r) => {
+  if (!r.ok) throw new Error(`WAD ${r.status}`);
+  return r.arrayBuffer();
+});
+
+const t0 = performance.now();
+const Module = await createDoom({
+  canvas,
+  locateFile: (name) => new URL(name, moduleUrl).href,
+  blissDataDir: '/data',
+  preRun: [(M) => {
+    M.addRunDependency('wad');
+    wad.then((buf) => {
+      M.FS.writeFile('/data/DOOM1.WAD', new Uint8Array(buf));
+      M.removeRunDependency('wad');
+    }, (e) => log('WAD load failed: ' + e));
+  }],
+  print: (s) => { console.log(s); if (q.has('verbose')) log(s); },
+  onBlissEvent(type, json) {
+    const data = JSON.parse(json || '{}');
+    window.__events.push({ type, data, t: performance.now() - t0 });
+    log(`[event] ${type} ${json}`);
+    if (type === 'started') { statusEl.textContent = `running (${data.game})`; canvas.focus(); }
+    if (type === 'quit') statusEl.textContent = 'quit';
+    if (type === 'error') statusEl.textContent = 'error: ' + data.message;
+    if (type === 'pauseChanged') statusEl.textContent = data.paused ? `paused (${data.source})` : 'running';
+  },
+});
+window.__doom = Module;
+document.getElementById('pause').onclick = () => { Module._bliss_pause(); };
+document.getElementById('resume').onclick = () => { Module._bliss_resume(); canvas.focus(); };
+document.getElementById('vol').oninput = (e) => Module._bliss_set_master_volume(+e.target.value);
+document.getElementById('quit').onclick = () => Module._bliss_quit();
+</script>
+</body>
+</html>
